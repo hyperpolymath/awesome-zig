@@ -40,6 +40,10 @@ snapshot_workflows() {
 restore_workflows() {
   source=$1
 
+  find "$WF_DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -print0 |
+    while IFS= read -r -d '' file; do
+      [ -f "$source/$(basename "$file")" ] || rm -f "$file"
+    done
   find "$source" -maxdepth 1 -type f -print0 2>/dev/null |
     while IFS= read -r -d '' file; do
       cp "$file" "$WF_DIR/$(basename "$file")"
