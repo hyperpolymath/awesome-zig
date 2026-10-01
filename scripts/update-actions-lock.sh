@@ -58,7 +58,8 @@ restore_workflows() {
 
 # Check whether a workflow references a reusable workflow at an exact ref.
 # Arguments: $1 is the workflow path; $2 is an owner/repo@ref dependency.
-# Return 0 for a matching uses: entry, or nonzero for no match or a missing file.
+# Match unquoted uses: values on their own lines, allowing trailing comments.
+# Return 0 for a match, or nonzero for no match, a missing file or an awk error.
 workflow_references_reusable_dependency() {
   workflow=$1
   dependency=$2
@@ -101,9 +102,13 @@ is_advisory_category() {
 }
 
 # Verify actions.lock using GH_BIN, printing diagnostics for findings.
-# Takes no arguments. With jq, return 0 for a valid lock or findings explained
-# by exact reusable-workflow stale matches plus optional advisory categories;
-# return nonzero otherwise. Without jq, return the verifier's exit status.
+# Takes no arguments. With jq, require one JSON object with a non-null valid
+# field and a findings array. Return 0 if valid is true, regardless of the
+# verifier's exit status, or if at least one exact reusable-workflow stale
+# match explains the findings with only optional advisory categories alongside.
+# For empty or malformed output, propagate a nonzero verifier status or return
+# 1 if the verifier succeeded. Return 1 for other rejected findings.
+# Without jq, propagate the verifier's exit status.
 # Verification may modify workflows; the caller restores their snapshot.
 verify_lock_coverage() {
   # gh-actions-lock v0.1.6 does not recognise reusable-workflow `uses:`
@@ -169,9 +174,10 @@ verify_lock_coverage() {
   fi
 }
 
-# Handle EXIT with no arguments, preserving the incoming exit status.
+# Handle EXIT with no arguments, saving the incoming exit status.
 # Unless COMPLETE is true, restore workflows and actions.lock from SNAPSHOT.
-# Remove SNAPSHOT and exit with the saved status.
+# Remove SNAPSHOT and exit with the saved status if cleanup succeeds.
+# With errexit enabled, a failed restore or removal can abort cleanup instead.
 cleanup() {
   status=$?
   if [ "$COMPLETE" != true ]; then
