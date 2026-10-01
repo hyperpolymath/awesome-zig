@@ -27,6 +27,9 @@ GH_BIN="${GH_BIN:-gh}"
 SNAPSHOT="$(mktemp -d)"
 COMPLETE=false
 
+# Copy top-level .yml and .yaml files from WF_DIR to a snapshot directory.
+# Arguments: $1 is the destination directory, created if needed.
+# Does not include actions.lock; the caller snapshots that file separately.
 snapshot_workflows() {
   destination=$1
   mkdir -p "$destination"
@@ -37,6 +40,9 @@ snapshot_workflows() {
     done
 }
 
+# Restore WF_DIR workflow files from the snapshot directory in $1.
+# Remove top-level .yml and .yaml files absent from the snapshot, then copy
+# snapshot files back into WF_DIR. Leave actions.lock to the caller.
 restore_workflows() {
   source=$1
 
@@ -50,6 +56,9 @@ restore_workflows() {
     done
 }
 
+# Check whether a workflow references a reusable workflow at an exact ref.
+# Arguments: $1 is the workflow path; $2 is an owner/repo@ref dependency.
+# Return 0 for a matching uses: entry, or nonzero for no match or a missing file.
 workflow_references_reusable_dependency() {
   workflow=$1
   dependency=$2
@@ -73,6 +82,8 @@ workflow_references_reusable_dependency() {
   ' "$workflow"
 }
 
+# Classify the finding category in $1 as advisory or blocking.
+# Return 0 for sha-as-ref, or 1 for every other category.
 is_advisory_category() {
   # Advisory findings never affect the tool's own `valid` bit: a tree whose
   # only findings are `sha-as-ref` reports `"valid": true` (measured
@@ -89,6 +100,11 @@ is_advisory_category() {
   esac
 }
 
+# Verify actions.lock using GH_BIN, printing diagnostics for findings.
+# Takes no arguments. With jq, return 0 for a valid lock or findings explained
+# by exact reusable-workflow stale matches plus optional advisory categories;
+# return nonzero otherwise. Without jq, return the verifier's exit status.
+# Verification may modify workflows; the caller restores their snapshot.
 verify_lock_coverage() {
   # gh-actions-lock v0.1.6 does not recognise reusable-workflow `uses:`
   # paths. GitHub's startup enforcement nevertheless requires callers to
@@ -153,6 +169,9 @@ verify_lock_coverage() {
   fi
 }
 
+# Handle EXIT with no arguments, preserving the incoming exit status.
+# Unless COMPLETE is true, restore workflows and actions.lock from SNAPSHOT.
+# Remove SNAPSHOT and exit with the saved status.
 cleanup() {
   status=$?
   if [ "$COMPLETE" != true ]; then
